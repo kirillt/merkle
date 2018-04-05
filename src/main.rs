@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 
+mod tree;
+
 fn sha256(value: &str) -> String {
     let mut sha = Sha256::new();
     sha.input_str(value);
@@ -16,7 +18,9 @@ fn hash(value: &str) -> String {
 
 fn main() {
     let txs = vec!["transaction1", "transaction2", "transaction3"];
-    let txs: HashMap<_,_> = txs.into_iter().map(|value| (hash(value), value)).collect();
+    let txs: HashMap<_,_> = txs.into_iter().map(|tx| (hash(tx), tx)).collect();
 
     println!("{:?}", txs);
+
+    tree::test();
 }
