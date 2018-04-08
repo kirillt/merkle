@@ -65,6 +65,15 @@ impl<T> Tree<T> {
         result
     }
 
+
+    fn value(&self) -> &T {
+        match self {
+            &Tree::Nil => panic!("Can't get value from empty tree"),
+            &Tree::Leaf(ref x) => x,
+            &Tree::Branch { left: _, right: _, ref value } => value
+        }
+    }
+
     fn fold<R>(self, on_nil: &Fn() -> R, on_leaf: &Fn(T) -> R,
                      on_branch: &Fn(R,R,T) -> R) -> R {
         match self {
@@ -77,12 +86,17 @@ impl<T> Tree<T> {
         }
     }
 
-    fn map<R>(self, f: &Fn(T) -> R) -> Tree<R> {
-        self.fold(&|| Tree::Nil, &|x| Tree::Leaf(f(x)),
+    fn map_separately<R>(self, on_leaf: &Fn(T) -> R,
+                               on_branch: &Fn(&R,&R,T) -> R) -> Tree<R> {
+        self.fold(&|| Tree::Nil, &|x| Tree::Leaf(on_leaf(x)),
                   &|l,r,v| Tree::Branch {
-                      left: Box::new(l), right: Box::new(r),
-                      value: f(v)
+                      value: on_branch(l.value(), r.value(), v),
+                      left: Box::new(l), right: Box::new(r)
                   })
+    }
+
+    fn map<R>(self, f: &Fn(T) -> R) -> Tree<R> {
+        self.map_separately(f, &|_,_,v| f(v))
     }
 
 }
@@ -113,9 +127,13 @@ pub fn test() {
     println!("height must be 4: {}", height);
     println!();
 
-    let stringified: Tree<String> = nine_leaves.map(&|opt| match opt {
+    let stringified: Tree<String> = nine_leaves.clone().map(&|opt| match opt {
         Some(v) => format!("{}", v),
         None => "?".to_string()
     });
     println!("stringified:\n{:?}", stringified);
+    println!();
+
+    let tree_of_sums: Tree<usize> = nine_leaves.map_separately(&|x| x.unwrap(), &|l,r,_| l + r);
+    println!("sums:\n{:?}", tree_of_sums);
 }
