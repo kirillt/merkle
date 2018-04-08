@@ -1,20 +1,11 @@
 extern crate crypto;
 
-use std::collections::HashMap;
-use crypto::digest::Digest;
-use crypto::sha2::Sha256;
-
+mod hash;
 mod tree;
+mod merkle;
 
-fn sha256(value: &str) -> String {
-    let mut sha = Sha256::new();
-    sha.input_str(value);
-    sha.result_str()
-}
-
-fn hash(value: &str) -> String {
-    sha256(&sha256(value))
-}
+use std::collections::HashMap;
+use hash::*;
 
 fn main() {
     let txs = vec!["transaction1", "transaction2", "transaction3"];
