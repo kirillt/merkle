@@ -2,7 +2,9 @@ use crypto::digest::Digest;
 use crypto::sha2::Sha256;
 
 pub fn hash(value: &str) -> String {
-    sha256(&sha256(value))
+    let full = sha256(&sha256(value));
+
+    (&full[0..3]).to_string() //debug
 }
 
 fn sha256(value: &str) -> String {

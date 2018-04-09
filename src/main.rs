@@ -4,14 +4,21 @@ mod hash;
 mod tree;
 mod merkle;
 
-use std::collections::HashMap;
-use hash::*;
+use hash::hash;
+use merkle::Merkle;
+use std::iter::FromIterator;
 
 fn main() {
-    let txs = vec!["transaction1", "transaction2", "transaction3"];
-    let txs: HashMap<_,_> = txs.into_iter().map(|tx| (hash(tx), tx)).collect();
+    let merkle_tree = Merkle::from_iter(
+        vec!["tx1", "tx2", "tx3",
+             "tx4", "tx5", "tx6",
+             "tx7"]);
 
-    println!("{:?}", txs);
+    println!("Tree: {:?}", merkle_tree.tree);
+    println!("Data: {:?}", merkle_tree.data);
 
-    tree::test();
+    let tx = "tx3";
+    let key = hash(tx);
+    let path = merkle_tree.path(&key);
+    println!("Path of {} with key {}: {:?}", tx, key, path);
 }
