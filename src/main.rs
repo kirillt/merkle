@@ -1,7 +1,6 @@
 extern crate crypto;
 
 mod hash;
-mod tree;
 mod merkle;
 
 use hash::hash;
