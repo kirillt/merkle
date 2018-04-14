@@ -3,21 +3,25 @@ extern crate crypto;
 mod hash;
 mod merkle;
 
-use hash::hash;
 use merkle::Merkle;
 use std::iter::FromIterator;
 
 fn main() {
-    let merkle_tree = Merkle::from_iter(
-        vec!["tx1", "tx2", "tx3",
-             "tx4", "tx5", "tx6",
-             "tx7"]);
+    let txs = vec!["tx1", "tx2", "tx3",
+                  "tx4", "tx5", "tx6",
+                  "tx7"];
 
-    println!("Tree: {:?}", merkle_tree.tree);
+    let merkle_tree = Merkle::from_iter(txs);
+
     println!("Data: {:?}", merkle_tree.data);
+    println!("Tree: {:?}", merkle_tree.tree);
+    println!("Verification passed? {}", merkle_tree.verify_tree());
+    println!();
 
-    let tx = "tx3";
-    let key = hash(tx);
-    let path = merkle_tree.path(&key);
-    println!("Path of {} with key {}: {:?}", tx, key, path);
+    for key in merkle_tree.data.keys() {
+        let path = merkle_tree.path(key);
+        println!("Path of {} is {:?}", key, path);
+        println!("Verification passed? {}", merkle_tree.verify_path(key, &path.unwrap()));
+        println!();
+    }
 }

@@ -13,15 +13,67 @@ pub struct Merkle {
     pub data: HashMap<String,String>
 }
 
+#[derive(Debug)]
+pub enum PathNode {
+    Left(String),
+    Right(String)
+}
+
 impl Merkle {
 
-    pub fn path(&self, key: &String) -> Option<Vec<String>> {
-        unimplemented!();
+    pub fn root(&self) -> &String {
+        &self.tree[0]
     }
 
-    #[allow(dead_code)]
-    pub fn diff(&self, _other: &Vec<String>) -> Vec<String> {
-        unimplemented!()
+    pub fn verify_tree(&self) -> bool {
+        let last = self.tree.len() - 1;
+
+        self.tree.iter().enumerate()
+            .map(|(i, key)| {
+                let (l, r) = (i * 2 + 1, (i + 1) * 2);
+                l > last || r > last ||
+                    key == &hash(&(self.tree[r].clone() + &self.tree[l]))
+            })
+            .all(|result| result == true)
+    }
+
+    pub fn path(&self, key: &String) -> Option<Vec<PathNode>> {
+        self.tree.iter().enumerate()
+            .find(|&(_, elem)| elem == key)
+            .map(|(mut i, _)| {
+                let mut result: Vec<PathNode> = vec![];
+                while i > 0 {
+                    result.push(self.neighbour(i));
+                    i = parent(i);
+                }
+                result
+            })
+    }
+
+    pub fn verify_path(&self, target: &String, path: &Vec<PathNode>) -> bool {
+        let result = path.iter().fold(target.clone(), |acc, node| {
+            let mut buffer = String::new();
+            match node {
+                &PathNode::Left(ref key) => {
+                    buffer.push_str(key);
+                    buffer.push_str(&acc);
+                },
+                &PathNode::Right(ref key) => {
+                    buffer.push_str(&acc);
+                    buffer.push_str(key);
+                }
+            }
+            hash(&buffer)
+        });
+        &result == self.root()
+    }
+
+    fn neighbour(&self, i: usize) -> PathNode {
+        if i % 2 == 0 {
+            PathNode::Right(self.tree[i - 1].clone())
+        } else {
+            PathNode::Left(self.tree[i + 1].clone())
+        }
     }
 
 }
@@ -31,9 +83,7 @@ impl<T: ToString> FromIterator<T> for Merkle {
     fn from_iter<I: IntoIterator<Item = T>>(leaves: I) -> Self {
 
         fn update_parent(tree: &mut Vec<Option<String>>, i: usize, child: &String) -> () {
-            let i = (i - 1) / 2;
-
-            tree[i] = tree[i].take()
+            tree[parent(i)] = tree[parent(i)].take()
                 .map(|parent| hash(&(parent + child.as_str())))
                 .or(Some(child.clone()));
         };
@@ -70,4 +120,8 @@ impl<T: ToString> FromIterator<T> for Merkle {
         Merkle { leaves, total, tree, data }
     }
 
+}
+
+fn parent(i: usize) -> usize {
+    (i - 1) / 2
 }
