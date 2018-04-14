@@ -4,4 +4,5 @@ version = "0.1.0"
 authors = ["Kirill Taran <kirill.t256@gmail.com>"]
 
 [dependencies]
+clippy = { version = "*", optional = true }
 rust-crypto = "0.2.36"

@@ -34,10 +34,10 @@ impl Merkle {
                 l > last || r > last ||
                     key == &hash(&(self.tree[r].clone() + &self.tree[l]))
             })
-            .all(|result| result == true)
+            .all(|result| result)
     }
 
-    pub fn path(&self, key: &String) -> Option<Vec<PathNode>> {
+    pub fn path(&self, key: &str) -> Option<Vec<PathNode>> {
         self.tree.iter().enumerate()
             .find(|&(_, elem)| elem == key)
             .map(|(mut i, _)| {
@@ -50,15 +50,15 @@ impl Merkle {
             })
     }
 
-    pub fn verify_path(&self, target: &String, path: &Vec<PathNode>) -> bool {
-        let result = path.iter().fold(target.clone(), |acc, node| {
+    pub fn verify_path(&self, target: &str, path: &[PathNode]) -> bool {
+        let result = path.iter().fold(target.to_string(), |acc, node| {
             let mut buffer = String::new();
             match node {
-                &PathNode::Left(ref key) => {
+                PathNode::Left(ref key) => {
                     buffer.push_str(key);
                     buffer.push_str(&acc);
                 },
-                &PathNode::Right(ref key) => {
+                PathNode::Right(ref key) => {
                     buffer.push_str(&acc);
                     buffer.push_str(key);
                 }
@@ -82,10 +82,10 @@ impl<T: ToString> FromIterator<T> for Merkle {
 
     fn from_iter<I: IntoIterator<Item = T>>(leaves: I) -> Self {
 
-        fn update_parent(tree: &mut Vec<Option<String>>, i: usize, child: &String) -> () {
+        fn update_parent(tree: &mut Vec<Option<String>>, i: usize, child: &str) -> () {
             tree[parent(i)] = tree[parent(i)].take()
-                .map(|parent| hash(&(parent + child.as_str())))
-                .or(Some(child.clone()));
+                .map(|parent| hash(&(parent + child)))
+                .or_else(|| Some(child.to_string()));
         };
 
         let data: HashMap<String,String> = leaves.into_iter().map(|key| {
