@@ -25,18 +25,22 @@ impl Merkle {
     }
 
     pub fn verify_tree(&self) -> bool {
-        let last = self.total - 1;
+        if self.total < 1 {
+            true
+        } else {
+            let last = self.total - 1;
 
-        let hash_inv = |l: usize, r: usize| hash(&(self.tree[r].clone() + &self.tree[l]));
+            let hash_inv = |l: usize, r: usize| hash(&(self.tree[r].clone() + &self.tree[l]));
 
-        self.tree
-            .iter()
-            .enumerate()
-            .map(|(i, key)| {
-                let (l, r) = (i * 2 + 1, (i + 1) * 2);
-                l > last || r > last || key == &hash_inv(l, r)
-            })
-            .all(|result| result)
+            self.tree
+                .iter()
+                .enumerate()
+                .map(|(i, key)| {
+                    let (l, r) = (i * 2 + 1, (i + 1) * 2);
+                    l > last || r > last || key == &hash_inv(l, r)
+                })
+                .all(|result| result)
+        }
     }
 
     pub fn path(&self, key: &str) -> Option<Vec<PathNode>> {
@@ -99,7 +103,7 @@ impl<T: ToString> FromIterator<T> for Merkle {
             .collect();
 
         let leaves = data.keys().len();
-        let total = leaves * 2 - 1;
+        let total = if leaves > 0 { leaves * 2 - 1 } else { 0 };
 
         let mut tree: Vec<Option<String>> = vec![None; total];
         let mut i = total;
@@ -108,7 +112,9 @@ impl<T: ToString> FromIterator<T> for Merkle {
             i -= 1;
 
             tree[i] = Some(leaf.clone());
-            update_parent(&mut tree, i, &leaf);
+            if i > 0 {
+                update_parent(&mut tree, i, &leaf);
+            }
         }
 
         while i > 1 {
