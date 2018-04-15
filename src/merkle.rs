@@ -24,8 +24,34 @@ impl Merkle {
         &self.tree[0]
     }
 
-    pub fn insert(&mut self, value: &str) -> String {
-        unimplemented!()
+    pub fn insert(&mut self, value: &str) -> bool {
+        let key = hash(value);
+
+        self.data.get(&key)
+            .map(|_| false)
+            .unwrap_or_else(|| {
+                self.data.insert(key.clone(), value.to_string());
+
+                if self.tree.is_empty() {
+                    self.tree.push(key);
+                    self.total += 1;
+                } else {
+                    // there is no unpaired leaves in the tree
+                    // when we insert new leaf -- it makes new pair with leaf from above
+                    let i = self.total;
+                    let p = parent(i);
+
+                    let old = self.tree[p].clone();
+                    self.tree.push(old.clone());
+                    self.tree.push(key.clone());
+                    self.update_parents(p, hash(&(key + &old)));
+
+                    self.total += 2;
+                }
+
+                self.leaves += 1;
+                true
+            })
     }
 
     pub fn delete(&mut self, key: &str) {
@@ -84,6 +110,20 @@ impl Merkle {
         &result == self.root()
     }
 
+    fn update_parents(&mut self, from: usize, initial_key: String) {
+        let mut i = from;
+        let mut updated_key = initial_key;
+        while i > 0 {
+            self.tree[i] = updated_key.clone();
+            updated_key = match self.neighbour(i) {
+                PathNode::Left(neighbour_key) => hash(&(neighbour_key + &updated_key)),
+                PathNode::Right(neighbour_key) => hash(&(updated_key + &neighbour_key))
+            };
+            i = parent(i);
+        }
+        self.tree[i] = updated_key;
+    }
+
     fn neighbour(&self, i: usize) -> PathNode {
         if i % 2 == 0 {
             PathNode::Right(self.tree[i - 1].clone())
@@ -100,7 +140,7 @@ impl<T: ToString> FromIterator<T> for Merkle {
                 .take()
                 .map(|parent| hash(&(parent + child)))
                 .or_else(|| Some(child.to_string()));
-        };
+        }
 
         let data: HashMap<String, String> = leaves
             .into_iter()
