@@ -24,6 +24,14 @@ impl Merkle {
         &self.tree[0]
     }
 
+    pub fn insert(&mut self, value: &str) -> String {
+        unimplemented!()
+    }
+
+    pub fn delete(&mut self, key: &str) {
+        unimplemented!()
+    }
+
     pub fn verify_tree(&self) -> bool {
         if self.total < 1 {
             true

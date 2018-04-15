@@ -6,3 +6,6 @@ authors = ["Kirill Taran <kirill.t256@gmail.com>"]
 [dependencies]
 clippy = { version = "*", optional = true }
 rust-crypto = "0.2.36"
+
+[dev-dependencies]
+rand = "0.3.14"
