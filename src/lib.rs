@@ -19,15 +19,42 @@ mod tests {
     use tests::rand::{Rng};
 
     #[test]
+    fn create() {
+        check_tree(&tree_with_n_leaves(7));
+    }
+
+    #[test]
+    fn insert() {
+        let mut merkle = tree_with_n_leaves(7);
+        merkle.insert("tx1");
+        merkle.insert("tx8");
+        merkle.insert("tx9");
+        merkle.insert("tx10");
+        merkle.insert("tx11");
+        check_tree(&merkle);
+    }
+
+    #[test]
+    fn delete() {
+        let mut merkle = tree_with_n_leaves(7);
+        merkle.delete("tx11");
+        merkle.delete("tx3");
+        merkle.delete("tx7");
+        merkle.delete("tx4");
+        merkle.delete("tx1");
+        check_tree(&merkle);
+    }
+
+    #[test]
     fn automated_test() {
         let mut rng = rand::thread_rng();
 
-        for n in 0..100 {
+        for n in 0..50 {
             let mut merkle = tree_with_n_leaves(n);
             check_tree(&merkle);
 
-            for k in 0..1000 {
-                let tx = format!("tx{}", rng.gen_range(0, n));
+            for _ in 0..50 {
+                let tx = format!("tx{}", rng.gen_range(0, n + 1));
                 let key = hash(&tx);
                 match rng.gen_range(0, 2) {
                     0 => {
@@ -48,6 +75,7 @@ mod tests {
     }
 
     fn check_tree(merkle: &Merkle) {
+        assert!(merkle.total == 0 || merkle.total == merkle.leaves * 2 - 1);
         assert!(merkle.verify_tree());
 
         assert!(merkle.path("absent_key").is_none());
@@ -73,25 +101,31 @@ mod tests {
     #[bench]
     fn insert_10000_to_empty(bench: &mut Bencher) {
         let mut tree = tree_with_n_leaves(0);
-        for i in 1..10001 {
-            tree.insert(&format!("tx{}", i));
-        }
+        bench.iter(|| {
+            for i in 1..10001 {
+                tree.insert(&format!("tx{}", i));
+            }
+        })
     }
 
     #[bench]
     fn delete_10000_to_empty_asc(bench: &mut Bencher) {
         let mut tree = tree_with_n_leaves(10000);
-        for i in 1..10001 {
-            tree.delete(&format!("tx{}", i));
-        }
+        bench.iter(|| {
+            for i in 1..10001 {
+                tree.delete(&format!("tx{}", i));
+            }
+        })
     }
 
     #[bench]
     fn delete_10000_to_empty_desc(bench: &mut Bencher) {
         let mut tree = tree_with_n_leaves(10000);
-        for i in (1..10001).rev() {
-            tree.delete(&format!("tx{}", i));
-        }
+        bench.iter(|| {
+            for i in (1..10001).rev() {
+                tree.delete(&format!("tx{}", i));
+            }
+        })
     }
 
     #[bench]
