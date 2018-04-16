@@ -5,8 +5,8 @@
 extern crate crypto;
 extern crate test;
 
-pub mod merkle;
 mod hash;
+pub mod merkle;
 
 #[cfg(test)]
 mod tests {
@@ -16,7 +16,7 @@ mod tests {
     use merkle::Merkle;
     use std::iter::FromIterator;
 
-    use tests::rand::{Rng};
+    use tests::rand::Rng;
 
     #[test]
     fn create() {
@@ -24,7 +24,7 @@ mod tests {
     }
 
     #[test]
-    fn insert() {
+    fn insert_generic() {
         let mut merkle = tree_with_n_leaves(7);
         merkle.insert("tx1");
         merkle.insert("tx8");
@@ -35,13 +35,40 @@ mod tests {
     }
 
     #[test]
-    fn delete() {
+    fn delete_odd_leaf() {
         let mut merkle = tree_with_n_leaves(7);
-        merkle.delete("tx11");
-        merkle.delete("tx3");
-        merkle.delete("tx7");
-        merkle.delete("tx4");
-        merkle.delete("tx1");
+
+        let odd_leaf = merkle.tree[6].clone();
+        merkle.delete(&odd_leaf);
+
+        assert!(merkle.path(&odd_leaf).is_none());
+        check_tree(&merkle);
+    }
+
+    #[test]
+    fn delete_farthest_leaves() {
+        let mut merkle = tree_with_n_leaves(7);
+
+        let farthest_leaf_even = merkle.tree[12].clone();
+        merkle.delete(&farthest_leaf_even);
+        assert!(merkle.path(&farthest_leaf_even).is_none());
+        check_tree(&merkle);
+
+        let farthest_leaf_odd = merkle.tree[9].clone();
+        merkle.delete(&farthest_leaf_odd);
+        assert!(merkle.path(&farthest_leaf_odd).is_none());
+        check_tree(&merkle);
+    }
+
+    #[test]
+    fn delete_generic() {
+        let mut merkle = tree_with_n_leaves(7);
+        merkle.delete(&hash("tx11")); //non-existent
+        merkle.delete(&hash("tx3"));
+        merkle.delete(&hash("tx7"));
+        merkle.delete(&hash("tx4"));
+        merkle.delete(&hash("tx1"));
+        assert_eq!(merkle.leaves, 3);
         check_tree(&merkle);
     }
 
@@ -61,13 +88,13 @@ mod tests {
                         merkle.insert(&tx);
                         assert!(merkle.path(&key).is_some());
                         assert!(merkle.data.get(&key).is_some());
-                    },
+                    }
                     1 => {
                         merkle.delete(&key);
                         assert!(merkle.path(&key).is_none());
                         assert!(merkle.data.get(&key).is_none());
-                    },
-                    _ => panic!("unexpected action")
+                    }
+                    _ => panic!("unexpected action"),
                 }
                 check_tree(&merkle);
             }

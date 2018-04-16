@@ -27,35 +27,86 @@ impl Merkle {
     pub fn insert(&mut self, value: &str) -> bool {
         let key = hash(value);
 
-        self.data.get(&key)
-            .map(|_| false)
-            .unwrap_or_else(|| {
-                self.data.insert(key.clone(), value.to_string());
+        self.data.get(&key).map(|_| false).unwrap_or_else(|| {
+            self.data.insert(key.clone(), value.to_string());
 
-                if self.tree.is_empty() {
-                    self.tree.push(key);
-                    self.total += 1;
-                } else {
-                    // there is no unpaired leaves in the tree
-                    // when we insert new leaf -- it makes new pair with leaf from above
-                    let i = self.total;
-                    let p = parent(i);
+            if self.tree.is_empty() {
+                self.tree.push(key);
+                self.total += 1;
+            } else {
+                // there is no unpaired leaves in the tree
+                // when we insert new leaf -- it makes new pair with leaf from above
+                let i = self.total;
+                let p = parent(i);
 
-                    let old = self.tree[p].clone();
-                    self.tree.push(old.clone());
-                    self.tree.push(key.clone());
-                    self.update_parents(p, hash(&(key + &old)));
+                let old = self.tree[p].clone();
+                self.tree.push(old.clone());
+                self.tree.push(key.clone());
+                self.update_parents(p, hash(&(key + &old)));
 
-                    self.total += 2;
-                }
+                self.total += 2;
+            }
 
-                self.leaves += 1;
-                true
-            })
+            self.leaves += 1;
+            true
+        })
     }
 
-    pub fn delete(&mut self, key: &str) {
-        unimplemented!()
+    pub fn delete(&mut self, key: &str) -> bool {
+        let n = self.total;
+        let k = self.leaves;
+
+        let target = &self.tree[n - k..n]
+            .iter()
+            .enumerate()
+            .find(|(_, k)| k == &key)
+            .map(|(i, _)| n - k + i);
+
+        match *target {
+            None => false,
+            Some(i) => {
+                if i == 0 {
+                    self.total = 0;
+                    self.leaves = 0;
+                    self.tree.pop();
+                } else {
+                    let neighbour_key = self.neighbour(i).unwrap();
+
+                    //easy cases are deletion of nearest leaf in odd trees
+                    //and deletion of leaf from farthest pair
+                    if k % 2 == 1 && i == n - k {
+                        self.tree[i] = self.tree.pop().unwrap();
+                        self.tree[i - 1] = self.tree.pop().unwrap();
+
+                        self.update_parents(parent(i), neighbour_key);
+                    } else if i == n - 1 || i == n - 2 {
+                        self.tree.pop();
+                        self.tree.pop();
+
+                        self.update_parents(parent(i), neighbour_key);
+                    } else {
+                        let p = parent(i);
+                        let q = parent(n - 1);
+
+                        self.tree[p * 2 + 2] = self.tree.pop().unwrap();
+                        self.tree[p * 2 + 1] = self.tree.pop().unwrap();
+
+                        let farthest_parent_key = self.tree[q].clone();
+                        self.tree[p] = farthest_parent_key.clone();
+                        //can be slightly optimized
+
+                        self.update_parents(q, neighbour_key);
+                        self.update_parents(p, farthest_parent_key);
+                    }
+
+                    self.leaves -= 1;
+                    self.total -= 2;
+                }
+
+                self.data.remove(key);
+                true
+            }
+        }
     }
 
     pub fn verify_tree(&self) -> bool {
@@ -117,7 +168,7 @@ impl Merkle {
             self.tree[i] = updated_key.clone();
             updated_key = match self.neighbour(i) {
                 PathNode::Left(neighbour_key) => hash(&(neighbour_key + &updated_key)),
-                PathNode::Right(neighbour_key) => hash(&(updated_key + &neighbour_key))
+                PathNode::Right(neighbour_key) => hash(&(updated_key + &neighbour_key)),
             };
             i = parent(i);
         }
@@ -175,10 +226,19 @@ impl<T: ToString> FromIterator<T> for Merkle {
         let tree: Vec<String> = tree.into_iter().map(|x| x.unwrap()).collect();
 
         Merkle {
-            leaves,
-            total,
             tree,
             data,
+            total,
+            leaves,
+        }
+    }
+}
+
+impl PathNode {
+    fn unwrap(self) -> String {
+        match self {
+            PathNode::Right(key) => key,
+            PathNode::Left(key) => key,
         }
     }
 }
