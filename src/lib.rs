@@ -112,17 +112,21 @@ mod tests {
         }
     }
 
-    fn tree_with_n_leaves(n: usize) -> Merkle {
+    fn vec_with_n_txs(n: usize) -> Vec<String> {
         let range = (1..n + 1).collect::<Vec<usize>>();
-        let txs = range.iter().map(|i| format!("tx{}", i));
-        Merkle::from_iter(txs)
+        range.iter().map(|i| format!("tx{}", i)).collect()
+    }
+
+    fn tree_with_n_leaves(n: usize) -> Merkle {
+        Merkle::from_iter(vec_with_n_txs(n))
     }
 
     use test::Bencher;
 
     #[bench]
     fn construction_10000(bench: &mut Bencher) {
-        bench.iter(|| tree_with_n_leaves(10000));
+        let txs = vec_with_n_txs(10000);
+        bench.iter(|| Merkle::from_iter(txs.iter()));
     }
 
     #[bench]
@@ -140,7 +144,7 @@ mod tests {
         let mut tree = tree_with_n_leaves(10000);
         bench.iter(|| {
             for i in 1..10001 {
-                tree.delete(&format!("tx{}", i));
+                tree.delete(&hash(&format!("tx{}", i)));
             }
         })
     }
@@ -150,7 +154,7 @@ mod tests {
         let mut tree = tree_with_n_leaves(10000);
         bench.iter(|| {
             for i in (1..10001).rev() {
-                tree.delete(&format!("tx{}", i));
+                tree.delete(&hash(&format!("tx{}", i)));
             }
         })
     }
