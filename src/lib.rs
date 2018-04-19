@@ -9,6 +9,7 @@ mod hash;
 pub mod merkle;
 
 #[cfg(test)]
+#[allow(non_snake_case)]
 mod tests {
     extern crate rand;
 
@@ -110,6 +111,10 @@ mod tests {
             let path = merkle.path(key).unwrap();
             assert!(merkle.verify_path(key, &path));
         }
+
+        //for (key, i) in merkle.index.iter() {
+        //    assert_eq!(merkle.tree.get(*i), Some(key));
+        //}
     }
 
     fn vec_with_n_txs(n: usize) -> Vec<String> {
@@ -122,46 +127,105 @@ mod tests {
     }
 
     use test::Bencher;
+    // Not precise benchmark, because we have to create new tree for every iteration
+    // when we test insertion and deletion. But I hope this implementation reflects
+    // amortized time.
 
     #[bench]
-    fn construction_10000(bench: &mut Bencher) {
-        let txs = vec_with_n_txs(10000);
-        bench.iter(|| Merkle::from_iter(txs.iter()));
+    fn construction_of_1K(bench: &mut Bencher) {
+        bench_construction(1_000, bench)
+    }
+    #[bench]
+    fn construction_of_2K(bench: &mut Bencher) {
+        bench_construction(2_000, bench)
+    }
+    #[bench]
+    fn construction_of_4K(bench: &mut Bencher) {
+        bench_construction(4_000, bench)
+    }
+    #[bench]
+    fn construction_of_8K(bench: &mut Bencher) {
+        bench_construction(8_000, bench)
+    }
+
+    fn bench_construction(n: usize, bench: &mut Bencher) {
+        let txs = vec_with_n_txs(n);
+        bench.iter(|| Merkle::from_iter(txs.iter()))
     }
 
     #[bench]
-    fn insert_10000_to_empty(bench: &mut Bencher) {
-        let mut tree = tree_with_n_leaves(0);
+    fn insert_to_250K(bench: &mut Bencher) {
+        bench_insert(250_000, bench)
+    }
+    #[bench]
+    fn insert_to_500K(bench: &mut Bencher) {
+        bench_insert(500_000, bench)
+    }
+    #[bench]
+    fn insert_to_1M(bench: &mut Bencher) {
+        bench_insert(1_000_000, bench)
+    }
+    #[bench]
+    fn insert_to_2M(bench: &mut Bencher) {
+        bench_insert(2_000_000, bench)
+    }
+
+    fn bench_insert(n: usize, bench: &mut Bencher) {
+        let mut tree = tree_with_n_leaves(n);
+        let mut rng = rand::thread_rng();
+
         bench.iter(|| {
-            for i in 1..10001 {
-                tree.insert(&format!("tx{}", i));
-            }
+            tree.insert(&format!("tx{}", rng.gen_range(n + 2, n * 2)));
         })
     }
 
     #[bench]
-    fn delete_10000_to_empty_asc(bench: &mut Bencher) {
-        let mut tree = tree_with_n_leaves(10000);
+    fn delete_from_250K(bench: &mut Bencher) {
+        bench_delete(250_000, bench)
+    }
+    #[bench]
+    fn delete_from_500K(bench: &mut Bencher) {
+        bench_delete(500_000, bench)
+    }
+    #[bench]
+    fn delete_from_1M(bench: &mut Bencher) {
+        bench_delete(1_000_000, bench)
+    }
+    #[bench]
+    fn delete_from_2M(bench: &mut Bencher) {
+        bench_delete(2_000_000, bench)
+    }
+
+    fn bench_delete(n: usize, bench: &mut Bencher) {
+        let mut tree = tree_with_n_leaves(n);
+        let mut rng = rand::thread_rng();
         bench.iter(|| {
-            for i in 1..10001 {
-                tree.delete(&hash(&format!("tx{}", i)));
-            }
+            tree.delete(&hash(&format!("tx{}", rng.gen_range(1, n + 1))));
         })
     }
 
     #[bench]
-    fn delete_10000_to_empty_desc(bench: &mut Bencher) {
-        let mut tree = tree_with_n_leaves(10000);
-        bench.iter(|| {
-            for i in (1..10001).rev() {
-                tree.delete(&hash(&format!("tx{}", i)));
-            }
-        })
+    fn proof_250K(bench: &mut Bencher) {
+        bench_proof(250_000, bench)
+    }
+    #[bench]
+    fn proof_500K(bench: &mut Bencher) {
+        bench_proof(250_000, bench)
+    }
+    #[bench]
+    fn proof_1M(bench: &mut Bencher) {
+        bench_proof(250_000, bench)
+    }
+    #[bench]
+    fn proof_2M(bench: &mut Bencher) {
+        bench_proof(250_000, bench)
     }
 
-    #[bench]
-    fn proof_10000(bench: &mut Bencher) {
-        let tree = tree_with_n_leaves(10000);
-        bench.iter(|| tree.path("tx5000"));
+    fn bench_proof(n: usize, bench: &mut Bencher) {
+        let tree = tree_with_n_leaves(n);
+        let mut rng = rand::thread_rng();
+        bench.iter(|| {
+            tree.path(&hash(&format!("tx{}", rng.gen_range(1, n + 1))));
+        })
     }
 }

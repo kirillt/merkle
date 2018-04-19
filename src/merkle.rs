@@ -11,6 +11,8 @@ pub struct Merkle {
     pub tree: Vec<String>,
 
     pub data: HashMap<String, String>,
+
+    index: HashMap<String, usize>,
 }
 
 #[derive(Debug)]
@@ -26,74 +28,89 @@ impl Merkle {
 
     pub fn insert(&mut self, value: &str) -> bool {
         let key = hash(value);
+        let lim = self.total;
 
-        self.data.get(&key).map(|_| false).unwrap_or_else(|| {
-            self.data.insert(key.clone(), value.to_string());
+        match self.index.get(&key) {
+            Some(_) => false,
+            None => {
+                self.data.insert(key.clone(), value.to_string());
 
-            if self.tree.is_empty() {
-                self.tree.push(key);
-                self.total += 1;
-            } else {
-                // there is no unpaired leaves in the tree
-                // when we insert new leaf -- it makes new pair with leaf from above
-                let i = self.total;
-                let p = parent(i);
+                if self.total == 0 {
+                    self.tree.push(key.clone());
+                    self.index.insert(key, 0);
+                    self.total = 1;
+                } else {
+                    // there is no unpaired leaves in the tree
+                    // when we insert new leaf -- it makes new pair with leaf from above
+                    let p = parent(lim);
 
-                let old = self.tree[p].clone();
-                self.tree.push(old.clone());
-                self.tree.push(key.clone());
-                self.update_parents(p, hash(&(key + &old)));
+                    let old = self.tree[p].clone();
+                    self.tree.push(old.clone());
+                    self.tree.push(key.clone());
 
-                self.total += 2;
+                    self.index.insert(old.clone(), lim);
+                    self.index.insert(key.clone(), lim + 1);
+
+                    self.update_parents(p, hash(&(key + &old)));
+
+                    self.total += 2;
+                }
+
+                self.leaves += 1;
+                true
             }
-
-            self.leaves += 1;
-            true
-        })
+        }
     }
 
     pub fn delete(&mut self, key: &str) -> bool {
         let n = self.total;
         let k = self.leaves;
 
-        let target = &self.tree[n - k..n]
-            .iter()
-            .enumerate()
-            .find(|(_, k)| k == &key)
-            .map(|(i, _)| n - k + i);
-
-        match *target {
+        match self.index.get(key) {
             None => false,
-            Some(i) => {
+            Some(&i) => {
                 if i == 0 {
                     self.total = 0;
                     self.leaves = 0;
                     self.tree.pop();
                 } else {
+                    let p = parent(i);
                     let neighbour_key = self.neighbour(i).unwrap();
+                    let farthest_left_leaf = self.tree.pop().unwrap();
+                    let farthest_right_leaf = self.tree.pop().unwrap();
 
                     //easy cases are deletion of nearest leaf in odd trees
                     //and deletion of leaf from farthest pair
                     if k % 2 == 1 && i == n - k {
-                        self.tree[i] = self.tree.pop().unwrap();
-                        self.tree[i - 1] = self.tree.pop().unwrap();
+                        self.tree[i] = farthest_left_leaf.clone();
+                        self.tree[i - 1] = farthest_right_leaf.clone();
 
-                        self.update_parents(parent(i), neighbour_key);
+                        self.index.insert(farthest_left_leaf, i);
+                        self.index.insert(farthest_right_leaf, i - 1);
+
+                        self.update_parents(p, neighbour_key);
                     } else if i == n - 1 || i == n - 2 {
-                        self.tree.pop();
-                        self.tree.pop();
+                        assert!(
+                            key == farthest_left_leaf && neighbour_key == farthest_right_leaf
+                                || key == farthest_right_leaf
+                                    && neighbour_key == farthest_left_leaf
+                        );
 
-                        self.update_parents(parent(i), neighbour_key);
+                        self.index.insert(neighbour_key.clone(), p);
+
+                        self.update_parents(p, neighbour_key);
                     } else {
-                        let p = parent(i);
                         let q = parent(n - 1);
 
-                        self.tree[p * 2 + 2] = self.tree.pop().unwrap();
-                        self.tree[p * 2 + 1] = self.tree.pop().unwrap();
+                        self.tree[p * 2 + 2] = farthest_left_leaf.clone();
+                        self.tree[p * 2 + 1] = farthest_right_leaf.clone();
+
+                        self.index.insert(farthest_left_leaf, p * 2 + 2);
+                        self.index.insert(farthest_right_leaf, p * 2 + 1);
 
                         let farthest_parent_key = self.tree[q].clone();
                         self.tree[p] = farthest_parent_key.clone();
-                        //can be slightly optimized
+                        self.index.insert(neighbour_key.clone(), q);
 
                         self.update_parents(q, neighbour_key);
                         self.update_parents(p, farthest_parent_key);
@@ -103,6 +120,7 @@ impl Merkle {
                     self.total -= 2;
                 }
 
+                self.index.remove(key);
                 self.data.remove(key);
                 true
             }
@@ -129,18 +147,15 @@ impl Merkle {
     }
 
     pub fn path(&self, key: &str) -> Option<Vec<PathNode>> {
-        self.tree
-            .iter()
-            .enumerate()
-            .find(|&(_, elem)| elem == key)
-            .map(|(mut i, _)| {
-                let mut result: Vec<PathNode> = vec![];
-                while i > 0 {
-                    result.push(self.neighbour(i));
-                    i = parent(i);
-                }
-                result
-            })
+        self.index.get(key).map(|target| {
+            let mut i = *target;
+            let mut result: Vec<PathNode> = vec![];
+            while i > 0 {
+                result.push(self.neighbour(i));
+                i = parent(i);
+            }
+            result
+        })
     }
 
     pub fn verify_path(&self, target: &str, path: &[PathNode]) -> bool {
@@ -205,12 +220,14 @@ impl<T: ToString> FromIterator<T> for Merkle {
         let total = if leaves > 0 { leaves * 2 - 1 } else { 0 };
 
         let mut tree: Vec<Option<String>> = vec![None; total];
+        let mut index = HashMap::new();
         let mut i = total;
 
         for leaf in data.keys() {
             i -= 1;
 
             tree[i] = Some(leaf.clone());
+            index.insert(leaf.clone(), i);
             if i > 0 {
                 update_parent(&mut tree, i, &leaf);
             }
@@ -230,6 +247,7 @@ impl<T: ToString> FromIterator<T> for Merkle {
             data,
             total,
             leaves,
+            index,
         }
     }
 }
