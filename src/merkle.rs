@@ -24,7 +24,7 @@ pub enum PathNode {
 }
 
 impl Merkle {
-    pub fn root(&self) -> &Key {
+    pub fn root(&self) -> &[u8] {
         &self.tree[0]
     }
 
@@ -98,12 +98,12 @@ impl Merkle {
                     } else if i == n - 1 || i == n - 2 {
                         assert!(
                             key == farthest_left_leaf.as_slice()
-                                && neighbour_key == farthest_right_leaf
+                                && neighbour_key == farthest_right_leaf.as_slice()
                                 || key == farthest_right_leaf.as_slice()
-                                    && neighbour_key == farthest_left_leaf
+                                    && neighbour_key == farthest_left_leaf.as_slice()
                         );
 
-                        self.index.insert(neighbour_key.clone(), p);
+                        self.index.insert(neighbour_key.to_vec(), p);
 
                         self.update_parents(p, neighbour_key);
                     } else {
@@ -117,7 +117,7 @@ impl Merkle {
 
                         let farthest_parent_key = self.tree[q].clone();
                         self.tree[p] = farthest_parent_key.clone();
-                        self.index.insert(neighbour_key.clone(), q);
+                        self.index.insert(neighbour_key.to_vec(), q);
 
                         self.update_parents(q, neighbour_key);
                         self.update_parents(p, farthest_parent_key);
@@ -169,12 +169,12 @@ impl Merkle {
         })
     }
 
-    pub fn verify_path(&self, target: &[u8], path: &[PathNode]) -> bool {
+    pub fn verify_path(&self, target: &Key, path: &[PathNode]) -> bool {
         let result = path.iter().fold(target.clone(), |acc, node| match *node {
             PathNode::Left(ref key) => hash_two(key, &acc[..]),
             PathNode::Right(ref key) => hash_two(&acc[..], key),
         });
-        &result == self.root()
+        result == self.root()
     }
 
     fn update_parents(&mut self, from: usize, initial_key: Key) {
@@ -188,7 +188,7 @@ impl Merkle {
             };
             i = parent(i);
         }
-        self.tree[i] = updated_key;
+        self.tree[i] = updated_key.clone();
     }
 
     fn neighbour(&self, i: usize) -> PathNode {
