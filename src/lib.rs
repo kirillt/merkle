@@ -13,7 +13,7 @@ pub mod merkle;
 mod tests {
     extern crate rand;
 
-    use hash::hash;
+    use hash::hash_str;
     use merkle::Merkle;
     use std::iter::FromIterator;
 
@@ -27,11 +27,11 @@ mod tests {
     #[test]
     fn insert_generic() {
         let mut merkle = tree_with_n_leaves(7);
-        merkle.insert("tx1");
-        merkle.insert("tx8");
-        merkle.insert("tx9");
-        merkle.insert("tx10");
-        merkle.insert("tx11");
+        merkle.insert_str("tx1");
+        merkle.insert_str("tx8");
+        merkle.insert_str("tx9");
+        merkle.insert_str("tx10");
+        merkle.insert_str("tx11");
         check_tree(&merkle);
     }
 
@@ -64,11 +64,11 @@ mod tests {
     #[test]
     fn delete_generic() {
         let mut merkle = tree_with_n_leaves(7);
-        merkle.delete(&hash("tx11")); //non-existent
-        merkle.delete(&hash("tx3"));
-        merkle.delete(&hash("tx7"));
-        merkle.delete(&hash("tx4"));
-        merkle.delete(&hash("tx1"));
+        merkle.delete(&hash_str("tx11")); //non-existent
+        merkle.delete(&hash_str("tx3"));
+        merkle.delete(&hash_str("tx7"));
+        merkle.delete(&hash_str("tx4"));
+        merkle.delete(&hash_str("tx1"));
         assert_eq!(merkle.leaves, 3);
         check_tree(&merkle);
     }
@@ -83,10 +83,10 @@ mod tests {
 
             for _ in 0..50 {
                 let tx = format!("tx{}", rng.gen_range(0, n + 1));
-                let key = hash(&tx);
+                let key = hash_str(&tx);
                 match rng.gen_range(0, 2) {
                     0 => {
-                        merkle.insert(&tx);
+                        merkle.insert_str(&tx);
                         assert!(merkle.path(&key).is_some());
                         assert!(merkle.data.get(&key).is_some());
                     }
@@ -106,7 +106,7 @@ mod tests {
         assert!(merkle.total == 0 || merkle.total == merkle.leaves * 2 - 1);
         assert!(merkle.verify_tree());
 
-        assert!(merkle.path("absent_key").is_none());
+        assert!(merkle.path_str("absent_key").is_none());
         for key in merkle.data.keys() {
             let path = merkle.path(key).unwrap();
             assert!(merkle.verify_path(key, &path));
@@ -117,9 +117,12 @@ mod tests {
         //}
     }
 
-    fn vec_with_n_txs(n: usize) -> Vec<String> {
-        let range = (1..n + 1).collect::<Vec<usize>>();
-        range.iter().map(|i| format!("tx{}", i)).collect()
+    fn vec_with_n_txs(n: usize) -> Vec<Vec<u8>> {
+        let range: Vec<usize> = (1..n + 1).collect();
+        range
+            .iter()
+            .map(|i| format!("tx{}", i).as_bytes().to_vec())
+            .collect()
     }
 
     fn tree_with_n_leaves(n: usize) -> Merkle {
@@ -149,8 +152,9 @@ mod tests {
     }
 
     fn bench_construction(n: usize, bench: &mut Bencher) {
-        let txs = vec_with_n_txs(n);
-        bench.iter(|| Merkle::from_iter(txs.iter()))
+        let txs: Vec<Vec<u8>> = vec_with_n_txs(n);
+        bench.iter(|| Merkle::from_iter(txs.iter().cloned()))
+        //todo: remove .cloned()
     }
 
     #[bench]
@@ -175,7 +179,7 @@ mod tests {
         let mut rng = rand::thread_rng();
 
         bench.iter(|| {
-            tree.insert(&format!("tx{}", rng.gen_range(n + 2, n * 2)));
+            tree.insert_str(&format!("tx{}", rng.gen_range(n + 2, n * 2)));
         })
     }
 
@@ -200,7 +204,7 @@ mod tests {
         let mut tree = tree_with_n_leaves(n);
         let mut rng = rand::thread_rng();
         bench.iter(|| {
-            tree.delete(&hash(&format!("tx{}", rng.gen_range(1, n + 1))));
+            tree.delete(&hash_str(&format!("tx{}", rng.gen_range(1, n + 1))));
         })
     }
 
@@ -225,7 +229,7 @@ mod tests {
         let tree = tree_with_n_leaves(n);
         let mut rng = rand::thread_rng();
         bench.iter(|| {
-            tree.path(&hash(&format!("tx{}", rng.gen_range(1, n + 1))));
+            tree.path(&hash_str(&format!("tx{}", rng.gen_range(1, n + 1))));
         })
     }
 }

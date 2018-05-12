@@ -1,39 +1,45 @@
-use hash::hash;
+use hash::*;
 
 use std::collections::HashMap;
 use std::iter::FromIterator;
+
+pub type Data = Vec<u8>;
 
 #[derive(Debug)]
 pub struct Merkle {
     pub total: usize,
     pub leaves: usize,
 
-    pub tree: Vec<String>,
+    pub tree: Vec<Key>,
 
-    pub data: HashMap<String, String>,
+    pub data: HashMap<Key, Data>,
 
-    index: HashMap<String, usize>,
+    index: HashMap<Key, usize>,
 }
 
 #[derive(Debug)]
 pub enum PathNode {
-    Left(String),
-    Right(String),
+    Left(Key),
+    Right(Key),
 }
 
 impl Merkle {
-    pub fn root(&self) -> &String {
+    pub fn root(&self) -> &Key {
         &self.tree[0]
     }
 
-    pub fn insert(&mut self, value: &str) -> bool {
-        let key = hash(value);
+    pub fn insert_str(&mut self, text: &str) -> bool {
+        self.insert(text.as_bytes())
+    }
+
+    pub fn insert(&mut self, bytes: &[u8]) -> bool {
+        let key = hash(bytes);
         let lim = self.total;
 
         match self.index.get(&key) {
             Some(_) => false,
             None => {
-                self.data.insert(key.clone(), value.to_string());
+                self.data.insert(key.clone(), bytes.to_vec());
 
                 if self.total == 0 {
                     self.tree.push(key.clone());
@@ -51,7 +57,7 @@ impl Merkle {
                     self.index.insert(old.clone(), lim);
                     self.index.insert(key.clone(), lim + 1);
 
-                    self.update_parents(p, hash(&(key + &old)));
+                    self.update_parents(p, hash_two(&key, &old));
 
                     self.total += 2;
                 }
@@ -62,7 +68,7 @@ impl Merkle {
         }
     }
 
-    pub fn delete(&mut self, key: &str) -> bool {
+    pub fn delete(&mut self, key: &[u8]) -> bool {
         let n = self.total;
         let k = self.leaves;
 
@@ -91,8 +97,9 @@ impl Merkle {
                         self.update_parents(p, neighbour_key);
                     } else if i == n - 1 || i == n - 2 {
                         assert!(
-                            key == farthest_left_leaf && neighbour_key == farthest_right_leaf
-                                || key == farthest_right_leaf
+                            key == farthest_left_leaf.as_slice()
+                                && neighbour_key == farthest_right_leaf
+                                || key == farthest_right_leaf.as_slice()
                                     && neighbour_key == farthest_left_leaf
                         );
 
@@ -133,7 +140,7 @@ impl Merkle {
         } else {
             let last = self.total - 1;
 
-            let hash_inv = |l: usize, r: usize| hash(&(self.tree[r].clone() + &self.tree[l]));
+            let hash_inv = |l: usize, r: usize| hash_two(&self.tree[r], &self.tree[l]);
 
             self.tree
                 .iter()
@@ -146,7 +153,11 @@ impl Merkle {
         }
     }
 
-    pub fn path(&self, key: &str) -> Option<Vec<PathNode>> {
+    pub fn path_str(&self, key: &str) -> Option<Vec<PathNode>> {
+        self.path(key.as_bytes())
+    }
+
+    pub fn path(&self, key: &[u8]) -> Option<Vec<PathNode>> {
         self.index.get(key).map(|target| {
             let mut i = *target;
             let mut result: Vec<PathNode> = vec![];
@@ -158,32 +169,22 @@ impl Merkle {
         })
     }
 
-    pub fn verify_path(&self, target: &str, path: &[PathNode]) -> bool {
-        let result = path.iter().fold(target.to_string(), |acc, node| {
-            let mut buffer = String::new();
-            match *node {
-                PathNode::Left(ref key) => {
-                    buffer.push_str(key);
-                    buffer.push_str(&acc);
-                }
-                PathNode::Right(ref key) => {
-                    buffer.push_str(&acc);
-                    buffer.push_str(key);
-                }
-            }
-            hash(&buffer)
+    pub fn verify_path(&self, target: &[u8], path: &[PathNode]) -> bool {
+        let result = path.iter().fold(target.clone(), |acc, node| match *node {
+            PathNode::Left(ref key) => hash_two(key, &acc[..]),
+            PathNode::Right(ref key) => hash_two(&acc[..], key),
         });
         &result == self.root()
     }
 
-    fn update_parents(&mut self, from: usize, initial_key: String) {
+    fn update_parents(&mut self, from: usize, initial_key: Key) {
         let mut i = from;
         let mut updated_key = initial_key;
         while i > 0 {
             self.tree[i] = updated_key.clone();
             updated_key = match self.neighbour(i) {
-                PathNode::Left(neighbour_key) => hash(&(neighbour_key + &updated_key)),
-                PathNode::Right(neighbour_key) => hash(&(updated_key + &neighbour_key)),
+                PathNode::Left(neighbour_key) => hash_two(&neighbour_key, &updated_key),
+                PathNode::Right(neighbour_key) => hash_two(&updated_key, &neighbour_key),
             };
             i = parent(i);
         }
@@ -199,27 +200,24 @@ impl Merkle {
     }
 }
 
-impl<T: ToString> FromIterator<T> for Merkle {
-    fn from_iter<I: IntoIterator<Item = T>>(leaves: I) -> Self {
-        fn update_parent(tree: &mut Vec<Option<String>>, i: usize, child: &str) -> () {
+impl FromIterator<Data> for Merkle {
+    fn from_iter<I: IntoIterator<Item = Data>>(leaves: I) -> Self {
+        fn update_parent(tree: &mut Vec<Option<Key>>, i: usize, child: &[u8]) -> () {
             tree[parent(i)] = tree[parent(i)]
                 .take()
-                .map(|parent| hash(&(parent + child)))
-                .or_else(|| Some(child.to_string()));
+                .map(|parent| hash_two(&parent, child))
+                .or_else(|| Some(child.to_vec()));
         }
 
-        let data: HashMap<String, String> = leaves
+        let data: HashMap<Key, Data> = leaves
             .into_iter()
-            .map(|key| {
-                let key = key.to_string();
-                (hash(&key), key)
-            })
+            .map(|leaf| (hash(&leaf[..]), leaf))
             .collect();
 
         let leaves = data.keys().len();
         let total = if leaves > 0 { leaves * 2 - 1 } else { 0 };
 
-        let mut tree: Vec<Option<String>> = vec![None; total];
+        let mut tree: Vec<Option<Key>> = vec![None; total];
         let mut index = HashMap::new();
         let mut i = total;
 
@@ -240,7 +238,7 @@ impl<T: ToString> FromIterator<T> for Merkle {
             update_parent(&mut tree, i, &key);
         }
 
-        let tree: Vec<String> = tree.into_iter().map(|x| x.unwrap()).collect();
+        let tree: Vec<Key> = tree.into_iter().map(|x| x.unwrap()).collect();
 
         Merkle {
             tree,
@@ -253,7 +251,7 @@ impl<T: ToString> FromIterator<T> for Merkle {
 }
 
 impl PathNode {
-    fn unwrap(self) -> String {
+    fn unwrap(self) -> Key {
         match self {
             PathNode::Right(key) => key,
             PathNode::Left(key) => key,
