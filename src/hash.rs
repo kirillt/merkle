@@ -4,7 +4,11 @@ use crypto::sha2::Sha256;
 pub type Key = Vec<u8>;
 
 pub fn hash(bytes: &[u8]) -> Key {
-    sha256(&sha256(bytes))
+    if !bytes.is_empty() {
+        sha256(&sha256(bytes))
+    } else {
+        vec![]
+    }
 }
 
 #[cfg(test)]

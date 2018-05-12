@@ -5,34 +5,56 @@ use std::iter::FromIterator;
 
 pub type Data = Vec<u8>;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Merkle {
     pub total: usize,
     pub leaves: usize,
 
     pub tree: Vec<Key>,
-
     pub data: HashMap<Key, Data>,
 
     index: HashMap<Key, usize>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PathNode {
     Left(Key),
     Right(Key),
 }
 
+pub struct DataBundle {
+    pub path: Vec<PathNode>,
+    pub data: Data,
+}
+
+pub fn transfer(source: &Merkle, target: &mut Merkle, i: usize) -> bool {
+    source
+        .query_bundle(i)
+        .map(|chunk| target.insert_bundle(&chunk))
+        .unwrap_or(false)
+}
+
 impl Merkle {
+    pub fn new() -> Self {
+        Merkle::from_iter(vec![])
+    }
+
+    pub fn reserve(root: &[u8], n: usize) -> Self {
+        let mut merkle = Merkle::from_iter(vec![vec![]; n]);
+        merkle.tree.insert(0, root.to_vec());
+        merkle.index.insert(root.to_vec(), 0);
+        merkle
+    }
+
     pub fn root(&self) -> &[u8] {
         &self.tree[0]
     }
 
-    pub fn insert_str(&mut self, text: &str) -> bool {
-        self.insert(text.as_bytes())
+    pub fn push_str(&mut self, text: &str) -> bool {
+        self.push(text.as_bytes())
     }
 
-    pub fn insert(&mut self, bytes: &[u8]) -> bool {
+    pub fn push(&mut self, bytes: &[u8]) -> bool {
         let key = hash(bytes);
         let lim = self.total;
 
@@ -48,7 +70,7 @@ impl Merkle {
                 } else {
                     // there is no unpaired leaves in the tree
                     // when we insert new leaf -- it makes new pair with leaf from above
-                    let p = parent(lim);
+                    let p = parent_of(lim);
 
                     let old = self.tree[p].clone();
                     self.tree.push(old.clone());
@@ -68,6 +90,45 @@ impl Merkle {
         }
     }
 
+    pub fn insert_bundle(&mut self, bundle: &DataBundle) -> bool {
+        self.insert(&bundle.data[..], &bundle.path[..])
+    }
+
+    pub fn insert(&mut self, bytes: &[u8], path: &[PathNode]) -> bool {
+        let key = hash(bytes);
+
+        if self.verify_path(&key, path) {
+            let mut target = 0;
+
+            let mut path = path.to_vec();
+            path.reverse();
+
+            for neighbour_node in path {
+                let neighbour = neighbour_node.child_of(target);
+                let neighbour_key = neighbour_node.unwrap();
+
+                if self.is_null(neighbour) {
+                    self.tree[neighbour] = neighbour_key;
+                } else {
+                    assert_eq!(self.tree[neighbour], neighbour_key);
+                }
+
+                target = neighbour_of(neighbour);
+            }
+
+            if self.is_null(target) {
+                self.tree[target] = key.clone();
+            } else {
+                assert_eq!(self.tree[target], key);
+            }
+            self.index.insert(key.clone(), target);
+            self.data.insert(key, bytes.to_vec());
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn delete(&mut self, key: &[u8]) -> bool {
         let n = self.total;
         let k = self.leaves;
@@ -80,8 +141,8 @@ impl Merkle {
                     self.leaves = 0;
                     self.tree.pop();
                 } else {
-                    let p = parent(i);
-                    let neighbour_key = self.neighbour(i).unwrap();
+                    let p = parent_of(i);
+                    let neighbour_key = self.neighbour(i).unwrap().to_vec();
                     let farthest_left_leaf = self.tree.pop().unwrap();
                     let farthest_right_leaf = self.tree.pop().unwrap();
 
@@ -107,7 +168,7 @@ impl Merkle {
 
                         self.update_parents(p, neighbour_key);
                     } else {
-                        let q = parent(n - 1);
+                        let q = parent_of(n - 1);
 
                         self.tree[p * 2 + 2] = farthest_left_leaf.clone();
                         self.tree[p * 2 + 1] = farthest_right_leaf.clone();
@@ -153,6 +214,14 @@ impl Merkle {
         }
     }
 
+    pub fn query_bundle(&self, i: usize) -> Option<DataBundle> {
+        self.ith_leaf(i).map(|key| {
+            let path = self.path(&key[..]).unwrap();
+            let data = self.data[&key[..]].clone();
+            DataBundle { path, data }
+        })
+    }
+
     pub fn ith_leaf(&self, i: usize) -> Option<Key> {
         if i < self.leaves {
             Some(self.tree[self.total - i - 1].clone())
@@ -171,7 +240,7 @@ impl Merkle {
             let mut result: Vec<PathNode> = vec![];
             while i > 0 {
                 result.push(self.neighbour(i));
-                i = parent(i);
+                i = parent_of(i);
             }
             result
         })
@@ -194,7 +263,7 @@ impl Merkle {
                 PathNode::Left(neighbour_key) => hash_two(&neighbour_key, &updated_key),
                 PathNode::Right(neighbour_key) => hash_two(&updated_key, &neighbour_key),
             };
-            i = parent(i);
+            i = parent_of(i);
         }
         self.tree[i] = updated_key.clone();
     }
@@ -206,12 +275,16 @@ impl Merkle {
             PathNode::Left(self.tree[i + 1].clone())
         }
     }
+
+    fn is_null(&self, i: usize) -> bool {
+        self.tree[i].is_empty()
+    }
 }
 
 impl FromIterator<Data> for Merkle {
     fn from_iter<I: IntoIterator<Item = Data>>(leaves: I) -> Self {
         fn update_parent(tree: &mut Vec<Option<Key>>, i: usize, child: &[u8]) -> () {
-            tree[parent(i)] = tree[parent(i)]
+            tree[parent_of(i)] = tree[parent_of(i)]
                 .take()
                 .map(|parent| hash_two(&parent, child))
                 .or_else(|| Some(child.to_vec()));
@@ -263,14 +336,29 @@ impl FromIterator<Data> for Merkle {
 }
 
 impl PathNode {
-    fn unwrap(self) -> Key {
+    fn child_of(&self, parent: usize) -> usize {
         match self {
-            PathNode::Right(key) => key,
-            PathNode::Left(key) => key,
+            PathNode::Right(_) => parent * 2 + 1,
+            PathNode::Left(_) => (parent + 1) * 2,
+        }
+    }
+
+    fn unwrap(&self) -> Key {
+        match self {
+            PathNode::Right(key) => key.clone(),
+            PathNode::Left(key) => key.clone(),
         }
     }
 }
 
-fn parent(i: usize) -> usize {
+fn neighbour_of(i: usize) -> usize {
+    if i % 2 == 0 {
+        i - 1
+    } else {
+        i + 1
+    }
+}
+
+fn parent_of(i: usize) -> usize {
     (i - 1) / 2
 }
