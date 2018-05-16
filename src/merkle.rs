@@ -153,6 +153,14 @@ impl Merkle {
         }
     }
 
+    pub fn ith_leaf(&self, i: usize) -> Option<Key> {
+        if i < self.leaves {
+            Some(self.tree[self.total - i - 1].clone())
+        } else {
+            None
+        }
+    }
+
     pub fn path_str(&self, key: &str) -> Option<Vec<PathNode>> {
         self.path(key.as_bytes())
     }
@@ -209,19 +217,21 @@ impl FromIterator<Data> for Merkle {
                 .or_else(|| Some(child.to_vec()));
         }
 
-        let data: HashMap<Key, Data> = leaves
+        let data: Vec<(Key, Data)> = leaves
             .into_iter()
             .map(|leaf| (hash(&leaf[..]), leaf))
             .collect();
 
-        let leaves = data.keys().len();
+        let keys: Vec<&Key> = data.iter().map(|(key, _)| key).collect();
+
+        let leaves = keys.len();
         let total = if leaves > 0 { leaves * 2 - 1 } else { 0 };
 
         let mut tree: Vec<Option<Key>> = vec![None; total];
         let mut index = HashMap::new();
         let mut i = total;
 
-        for leaf in data.keys() {
+        for leaf in keys {
             i -= 1;
 
             tree[i] = Some(leaf.clone());
@@ -239,6 +249,8 @@ impl FromIterator<Data> for Merkle {
         }
 
         let tree: Vec<Key> = tree.into_iter().map(|x| x.unwrap()).collect();
+
+        let data: HashMap<Key, Data> = data.iter().cloned().collect();
 
         Merkle {
             tree,

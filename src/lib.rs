@@ -36,6 +36,20 @@ mod tests {
     }
 
     #[test]
+    fn retrieval_by_index() {
+        use std::str::from_utf8;
+
+        for n in 1..100 {
+            let merkle = tree_with_n_leaves(n);
+            for i in 0..n {
+                let key = merkle.ith_leaf(i).unwrap();
+                let chunk = merkle.data.get(&key).unwrap();
+                assert_eq!(from_utf8(chunk), Ok(format!("tx{}", i + 1).as_str()));
+            }
+        }
+    }
+
+    #[test]
     fn delete_odd_leaf() {
         let mut merkle = tree_with_n_leaves(7);
 
