@@ -1,6 +1,5 @@
 #![cfg_attr(feature = "clippy", feature(plugin))]
 #![cfg_attr(feature = "clippy", plugin(clippy))]
-#![feature(iterator_flatten)]
 #![feature(test)]
 
 extern crate crypto;
